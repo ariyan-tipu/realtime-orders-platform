@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+markers = [
+    "integration: needs a reachable PostgreSQL (RT_DATABASE_URL)",
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true

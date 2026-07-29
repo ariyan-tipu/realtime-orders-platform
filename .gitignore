@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+build/
+dist/
+wheelhouse/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# C++ / CMake
+_skbuild/
+CMakeCache.txt
+CMakeFiles/
+*.so
+*.pyd
+*.obj
+*.o
+
+# Environment & secrets
+.env
+*.local
+
+# Databases & data dumps
+*.sqlite3
+pgdata/
+
+# IDE, local tooling and OS noise
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

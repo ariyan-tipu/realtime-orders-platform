@@ -1,0 +1,74 @@
+# Deployment to a single EC2 instance over SSH, plus an optional S3 sync of
+# the built frontend. Deliberately dormant: it does nothing (and costs
+# nothing) until the repository secrets below are configured. See
+# docs/deployment-aws.md for the full runbook and cost notes.
+#
+# Required secrets to activate:   EC2_HOST, EC2_USER, EC2_SSH_KEY
+# Optional (S3 static artifacts): AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+#                                 AWS_REGION, S3_BUCKET
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (default: latest)"
+        required: false
+        default: "latest"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check whether deployment secrets are configured
+        id: check
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          if [ -z "$EC2_HOST" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deployment is dormant: add EC2_HOST, EC2_USER and EC2_SSH_KEY secrets to activate (docs/deployment-aws.md)."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.check.outputs.configured == 'true'
+
+      - name: Install SSH key
+        if: steps.check.outputs.configured == 'true'
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Ship compose file and roll the stack
+        if: steps.check.outputs.configured == 'true'
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          IMAGE_PREFIX="ghcr.io/${GITHUB_REPOSITORY,,}"
+          scp -i ~/.ssh/deploy_key docker-compose.prod.yml "$EC2_USER@$EC2_HOST:~/app/docker-compose.prod.yml"
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
+            "cd ~/app && \
+             IMAGE_PREFIX=$IMAGE_PREFIX TAG=$TAG docker compose -f docker-compose.prod.yml pull && \
+             IMAGE_PREFIX=$IMAGE_PREFIX TAG=$TAG docker compose -f docker-compose.prod.yml up -d && \
+             docker image prune -f"
+
+      - name: Sync frontend build to S3 (optional)
+        if: steps.check.outputs.configured == 'true' && vars.S3_ENABLED == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+        run: |
+          cd frontend
+          npm ci && npm run build
+          aws s3 sync dist "s3://$S3_BUCKET/frontend/${GITHUB_SHA}" --delete

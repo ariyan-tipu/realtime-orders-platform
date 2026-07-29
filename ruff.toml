@@ -1,0 +1,26 @@
+line-length = 100
+target-version = "py313"
+src = ["services/core", "services/realtime", "native/pickpath/src"]
+extend-exclude = ["**/migrations/**"]
+
+[lint]
+select = [
+  "E",      # pycodestyle errors
+  "W",      # pycodestyle warnings
+  "F",      # pyflakes
+  "I",      # isort
+  "B",      # bugbear
+  "UP",     # pyupgrade
+  "SIM",    # simplify
+  "C4",     # comprehensions
+  "PT",     # pytest style
+  "DJ",     # django
+  "ASYNC",  # async pitfalls
+  "RET",    # return style
+]
+
+[lint.isort]
+known-first-party = ["config", "catalog", "inventory", "orders", "analytics", "app", "pickpath"]
+
+[format]
+quote-style = "double"

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pickpath"
+version = "1.0.0"
+description = "Warehouse pick-path optimisation: pure-Python reference implementation with optional C++ acceleration (pickpath-native)"
+authors = [{ name = "Ariyan Mohammed Tipu", email = "ariyantipu39@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+[project.optional-dependencies]
+native = ["pickpath-native"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pickpath"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true

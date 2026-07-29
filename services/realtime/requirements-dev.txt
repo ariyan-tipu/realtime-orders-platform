@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest>=8.3
+pytest-asyncio>=0.25
+httpx>=0.28
+ruff==0.15.22  # must match .github/workflows/ci.yml and .pre-commit-config.yaml
+mypy>=1.14

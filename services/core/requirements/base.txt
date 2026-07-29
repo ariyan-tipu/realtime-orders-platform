@@ -1,0 +1,7 @@
+Django>=5.2,<5.3
+djangorestframework>=3.16,<3.17
+django-cors-headers>=4.6,<5
+psycopg[binary]>=3.2,<4
+redis>=5.2,<7
+whitenoise>=6.8,<7
+Faker>=33

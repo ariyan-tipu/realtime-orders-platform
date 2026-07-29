@@ -1,0 +1,66 @@
+# Publishes the dashboard to GitHub Pages as a backend-free replay.
+#
+# The stack this repository is actually about (Django, FastAPI, PostgreSQL
+# LISTEN/NOTIFY, the C++ engine) cannot run on Pages, and the free tiers that
+# could host it either delete the database after 30 days or suspend the
+# compute every 5 minutes, which would break the persistent LISTEN connection
+# the whole design rests on. A demo link that is dead or slow is worse than
+# none, so what ships here is the production dashboard build with its event
+# source swapped for an in-browser simulation, labelled as such on the page.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - frontend/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+# Only the deployment is serialised; a queued run supersedes a waiting one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the replay bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      # The same gates the CI workflow applies; a demo that typechecks and
+      # passes its tests is the only kind worth publishing.
+      - working-directory: frontend
+        run: npm run typecheck
+      - working-directory: frontend
+        run: npm test
+      - working-directory: frontend
+        run: npm run build:replay
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: frontend/dist
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

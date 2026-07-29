@@ -1,0 +1,73 @@
+# Production-shaped stack: pre-built images, gunicorn/uvicorn workers, and a
+# single nginx entrypoint serving the built SPA and proxying /api + /ws.
+# Used verbatim by the EC2 runbook in docs/deployment-aws.md.
+#
+#   IMAGE_PREFIX=ghcr.io/<owner>/realtime-orders-platform TAG=latest \
+#     docker compose -f docker-compose.prod.yml up -d
+
+name: realtime-orders-prod
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  core:
+    image: ${IMAGE_PREFIX:?e.g. ghcr.io/owner/realtime-orders-platform}/core:${TAG:-latest}
+    env_file: .env
+    command: >
+      gunicorn config.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers ${GUNICORN_WORKERS:-2}
+      --access-logfile -
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  realtime:
+    image: ${IMAGE_PREFIX}/realtime:${TAG:-latest}
+    env_file: .env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --proxy-headers
+    expose:
+      - "8001"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  proxy:
+    image: ${IMAGE_PREFIX}/frontend:${TAG:-latest}
+    ports:
+      - "80:80"
+    depends_on:
+      - core
+      - realtime
+    restart: unless-stopped
+
+volumes:
+  pgdata:

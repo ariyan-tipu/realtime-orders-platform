@@ -1,0 +1,26 @@
+{
+  "name": "realtime-orders-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:replay": "vite --mode replay",
+    "build": "vue-tsc --noEmit && vite build",
+    "build:replay": "vue-tsc --noEmit && vite build --mode replay --base /realtime-orders-platform/",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pinia": "^2.3.0",
+    "vue": "^3.5.40"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "~5.9.3",
+    "vite": "^6.0.7",
+    "vitest": "^3.0.0",
+    "vue-tsc": "^3.3.8"
+  }
+}
