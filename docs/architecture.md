@@ -83,14 +83,14 @@ reverse, so the two lock classes cannot form a cycle either.
 
 | Failure | Behaviour |
 |---|---|
-| Oversell race | Impossible by construction (row locks); the DB CHECK `quantity >= 0` is defence in depth |
+| Oversell race | Ruled out for writers going through the order service (row locks in primary-key order); the DB CHECK `quantity >= 0` is defence in depth |
 | Transaction rolls back after emitting an event | Cannot happen; NOTIFY is transactional with the write |
 | Realtime service down | Orders unaffected; dashboards reconnect and re-hydrate; missed events are absorbed by the snapshot |
 | PostgreSQL restart | The listener reconnects with capped backoff; `/healthz` reports degraded meanwhile |
 | Slow or stuck dashboard tab | Its queue sheds oldest messages; other clients are unaffected |
 | Duplicate SKUs in one request | Merged at the API boundary; the service layer rejects duplicates outright |
 
-## Scaling story (the interview version)
+## Scaling story
 
 - **core** scales by adding gunicorn workers or replicas. It is stateless
   between requests; all coordination lives in PostgreSQL row locks.
@@ -101,3 +101,17 @@ reverse, so the two lock classes cannot form a cycle either.
   real scale (read replicas for the dashboard snapshot, an outbox plus a
   broker for events, per-warehouse partitioning) are documented trade-offs
   in ADR 0002, not accidents.
+
+## Tech stack, and why each piece is here
+
+| Tech | Why it is here |
+|---|---|
+| Django 5.2 + DRF | transactional business core: ORM, migrations, admin, `select_for_update` |
+| PostgreSQL 17 | the row-locking semantics the whole design rests on; LISTEN/NOTIFY as a transactional event channel |
+| FastAPI + asyncpg | an event loop is the right shape for thousands of idle WebSockets; WSGI is not |
+| Redis 7 | caches the hot analytics aggregation (30s TTL); not used for events, see ADR 0002 |
+| C++17 + pybind11 | CPU-bound optimisation inner loop; GIL released during compute |
+| Vue 3 + TypeScript + Pinia | snapshot-then-deltas dashboard with typed WebSocket contracts |
+| Docker + Compose | one-command reproducible stack, dev and production variants |
+| GitHub Actions + GHCR | the full pipeline on the free tier; images tagged `latest` and by SHA |
+| pytest | unit, integration and true concurrency tests as first-class citizens |

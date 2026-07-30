@@ -12,9 +12,10 @@ A small e-commerce backend that concentrates on two hard parts of order
 handling and one performance problem underneath them:
 
 1. **Concurrency correctness.** Many orders decrement the same stock at
-   once. This platform makes that safe with `SELECT ... FOR UPDATE` row
-   locks taken in a deadlock-free global order, and proves it with tests
-   that fire genuinely simultaneous transactions.
+   once. Every write goes through one service that takes
+   `SELECT ... FOR UPDATE` row locks in a global order, so writers using it
+   cannot oversell and cannot deadlock on lock ordering, and tests that fire
+   genuinely simultaneous transactions prove it.
 2. **Live updates without polling.** Order and stock events reach browser
    dashboards over WebSockets, fed by PostgreSQL `LISTEN/NOTIFY`, so an
    event can never exist for a rolled-back transaction.
@@ -30,21 +31,17 @@ exact-parity test suite.
 
 ![Live operations dashboard: order feed, stock levels and statuses updating over the WebSocket](docs/images/dashboard.png)
 
-About that demo, since the distinction matters: it is the production
-dashboard build with its event source swapped for an in-browser simulation,
-and the page says so at the top. There is no server behind it. GitHub Pages
-cannot run Django, FastAPI and PostgreSQL, and the free tiers that could
-either delete the database after 30 days or suspend the compute every five
-minutes, which would repeatedly kill the persistent `LISTEN` connection this
-design is built on. A demo link that is dead or slow would be worse than
-none. What the demo does show honestly is the UI, the snapshot-then-deltas
-update model and the pick-path optimiser, whose heuristic is
-[ported to TypeScript](frontend/src/demo/pickpath.ts) with the same
-tie-breaking rules so the routes drawn are the routes the real engines
-return. What it cannot show is the part that actually matters: there is one
-thread in a browser, so there is no contention and nothing for row locking
-to protect. Those guarantees are proven by the test suite against a real
-PostgreSQL, which is what the quickstart runs.
+What that demo is, since the distinction matters: the production dashboard
+build with its event source swapped for an in-browser simulation, and the
+page says so at the top. There is no server behind it, because GitHub Pages
+cannot run Django, FastAPI and PostgreSQL. It shows the UI, the
+snapshot-then-deltas update model and the pick-path optimiser, whose
+heuristic is [ported to TypeScript](frontend/src/demo/pickpath.ts) with the
+same tie-breaking rules, so the routes drawn are the routes the real engines
+return. It cannot show the part that matters most: one browser thread means
+no contention and nothing for row locking to protect. Those guarantees are
+proven by the test suite against a real PostgreSQL, which is what the
+quickstart runs.
 
 ## Architecture
 
@@ -77,12 +74,15 @@ Full reasoning: [docs/architecture.md](docs/architecture.md) and the
 
 ## The interesting parts
 
-### 1. Overselling is impossible by construction
+### 1. Overselling cannot happen through the order service
 
 Every stock mutation goes through one service function that locks the rows
 it will touch, always in primary-key order, so two transactions can never
-hold pieces of each other's lock set. That makes lock-ordering deadlocks
-impossible:
+hold pieces of each other's lock set. Under PostgreSQL's `FOR UPDATE`
+semantics that rules out both the oversell and lock-ordering deadlocks, for
+writers that go through this path; the
+[trade-offs section](#trade-offs-and-limitations) says what happens to code
+that does not.
 
 ```python
 locked = list(
@@ -168,12 +168,11 @@ reasoning: [docs/query-optimisation.md](docs/query-optimisation.md).
 
 ### 5. A demo that is still allowed to say no
 
-Being a public demo is not a reason to have no access control, and the
-tempting shortcut (open everything, it is only seed data) quietly breaks the
-guarantee in section 1. Cancelling an order returns its units to stock, and
-order ids are readable from the list endpoint, so "anyone may cancel
-anything" would hand a stranger the ability to move inventory. Three tiers,
-set as a project-wide default in
+The tempting shortcut for a public demo (open everything, it is only seed
+data) quietly breaks the guarantee in section 1: cancelling an order returns
+its units to stock and order ids are readable from the list endpoint, so
+"anyone may cancel anything" hands a stranger the ability to move inventory.
+Three tiers instead, set as a project-wide default in
 [config/permissions.py](services/core/config/permissions.py) rather than
 view by view, so a view added later inherits the restriction instead of
 DRF's `AllowAny`:
@@ -184,24 +183,19 @@ DRF's `AllowAny`:
 | Public write | place an order, demo traffic generator | anyone **while `DEMO_MODE` is on**, otherwise authenticated only |
 | Operator | advance or cancel an existing order | authenticated, always, demo mode or not |
 
-Everything defaults to the closed setting. `DEMO_MODE` is off unless asked
-for, `DEBUG` is off unless asked for, and the service refuses to boot
-without an explicit `DJANGO_SECRET_KEY` when debug is off rather than
-falling back to one committed to this repository. Tests cover the negative
-cases, including an anonymous attempt to cancel someone else's order
-returning 403 with the stock level unmoved
+Every environment switch defaults to the closed setting, and the service
+refuses to boot without an explicit `DJANGO_SECRET_KEY` when debug is off
+rather than falling back to one committed to this repository. Tests cover
+the negative cases, including an anonymous attempt to cancel someone else's
+order returning 403 with the stock level unmoved
 ([tests/test_api.py](services/core/tests/test_api.py)), and CI runs
-`manage.py check --deploy --fail-level WARNING` on every push, so the
-transport hardening is verified rather than asserted.
-
-The one place "secure by default" is wrong, and is therefore not the
-default: HSTS, the HTTPS redirect and secure-only cookies sit behind
-`DJANGO_BEHIND_TLS` rather than following `DEBUG`. The bundled nginx listens
-on port 80, so switching those on without a certificate in front is an
-outage rather than a hardening step, redirecting every request to a scheme
-nothing answers on and locking the admin out with cookies the browser will
-not send. That flag belongs in the deployment step that installs the
-certificate, which is what the runbook does.
+`manage.py check --deploy --fail-level WARNING` on every push. One place
+where "secure by default" is wrong is worth knowing about: HSTS, the HTTPS
+redirect and secure-only cookies sit behind `DJANGO_BEHIND_TLS` rather than
+following `DEBUG`, because the bundled nginx listens on port 80 and turning
+them on without a certificate in front is an outage rather than a hardening
+step. The reasoning, the tier definitions and the known limits of this model
+are in [SECURITY.md](SECURITY.md).
 
 ## Quickstart
 
@@ -321,17 +315,8 @@ Container Registry on `main`.
 Dependency hygiene is Dependabot **security** updates only: a pull request
 appears when a dependency actually has a vulnerability, and otherwise
 nothing does. It still has to clear the whole suite before it merges.
-
-Routine version updates are deliberately off, having been tried and removed.
-The requirements here are compatible ranges rather than pins, so most of what
-that produced was a bot raising `psycopg>=3.2,<4` to `>=3.3.4,<4` for a
-version the range already allowed and pip already installed: a pull request
-that changes nothing an environment would observe. A queue of those on a
-repository nobody merges daily reads as neglect while representing the
-opposite, and it buries the one notification that matters. A scanner job
-inside `ci.yml` was rejected for the same reason in reverse: it turns the
-build red for a CVE disclosed upstream, with no change here and nothing to
-fix here.
+Routine version bumps were tried and removed, and
+[SECURITY.md](SECURITY.md) says why.
 
 Deployment targets a single EC2 instance via `docker-compose.prod.yml`
 (nginx serves the SPA and terminates `/api` and `/ws`), with an optional S3
@@ -342,19 +327,8 @@ the whole pipeline can be demonstrated at zero standing cost. See
 deliberately absent; the images are standard OCI artefacts, so the EKS path
 stays open.
 
-## Tech stack, and why each piece is here
-
-| Tech | Why it is here |
-|---|---|
-| Django 5.2 + DRF | transactional business core: ORM, migrations, admin, `select_for_update` |
-| PostgreSQL 17 | the row-locking semantics the whole design rests on; LISTEN/NOTIFY as a transactional event channel |
-| FastAPI + asyncpg | an event loop is the right shape for thousands of idle WebSockets; WSGI is not |
-| Redis 7 | caches the hot analytics aggregation (30s TTL); not used for events, see ADR 0002 |
-| C++17 + pybind11 | CPU-bound optimisation inner loop; GIL released during compute |
-| Vue 3 + TypeScript + Pinia | snapshot-then-deltas dashboard with typed WebSocket contracts |
-| Docker + Compose | one-command reproducible stack, dev and production variants |
-| GitHub Actions + GHCR | the full pipeline on the free tier; images tagged `latest` and by SHA |
-| pytest | unit, integration and true concurrency tests as first-class citizens |
+Why each piece of the stack is here, one line each:
+[docs/architecture.md](docs/architecture.md#tech-stack-and-why-each-piece-is-here).
 
 ## Author
 
