@@ -41,7 +41,7 @@ flowchart LR
 1. `POST /api/orders/` validates SKUs and resolves them to variants.
 2. `orders.services.place_order` opens one transaction and takes
    `SELECT ... FOR UPDATE` on the stock rows, ordered by primary key.
-   `of=("self",)` keeps the joined variant rows unlocked.
+   `of=("self",)` leaves the joined variant rows free of locks.
 3. Availability is checked under the lock. Any shortage raises
    `InsufficientStock`, the transaction rolls back untouched, and the API
    returns 409 with per-SKU shortage details.
