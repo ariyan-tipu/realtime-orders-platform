@@ -333,7 +333,7 @@ Why each piece of the stack is here, one line each:
 ## Author
 
 **Ariyan Mohammed Tipu**. BSc Mathematics with Data Science, City,
-University of London; MSc Data Science, King's College London (2026 entry).
+University of London; MSc Statistics, King's College London (2026 entry).
 
 📧 ariyantipu39@gmail.com · [GitHub](https://github.com/ariyan-tipu)
 
