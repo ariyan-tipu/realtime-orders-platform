@@ -93,7 +93,7 @@ locked = list(
 # availability is checked under the lock; any shortage rolls back all of it
 ```
 
-The test that pins the claim down: eight threads, five units, and a
+The test that pins the claim down: eight threads, five units and a
 barrier so they hit PostgreSQL together.
 
 ```python
@@ -140,7 +140,7 @@ regenerated in every run's job summary, and `make bench` prints your own:
 | 40 | 2.304 | 0.022 | ~100x |
 | 60 | 7.446 | 0.063 | ~115x |
 
-The stable, reproducible finding is the shape, not any single figure: the
+What reproduces from run to run is the shape: the
 speedup grows with order size, from tens of times at small orders to
 around two orders of magnitude at the largest, which is what removing
 interpreter overhead from a quadratic loop should look like. Solution
@@ -158,8 +158,8 @@ on 240k orders with a 24-hour window matching 0.09% of history:
 
 | Variant | Plan | Execution time |
 |---|---|---:|
-| With index | **Index Only Scan** (Heap Fetches: 0) then Nested Loop via FK index | **4.08 ms** |
-| Without index | Parallel Seq Scan over 240k rows | 104.98 ms (**25.7x slower**) |
+| With index | Index Only Scan (Heap Fetches: 0) then Nested Loop via FK index | 4.08 ms |
+| Without index | Parallel Seq Scan over 240k rows | 104.98 ms (25.7x slower) |
 
 The write-up tells the whole story, including the first index design that
 the planner rightly ignored (it did not cover the join key) and the
@@ -180,7 +180,7 @@ DRF's `AllowAny`:
 | Tier | What | Who |
 |---|---|---|
 | Read | catalogue, stock, orders, pick paths, analytics | anyone; this is what the dashboard renders |
-| Public write | place an order, demo traffic generator | anyone **while `DEMO_MODE` is on**, otherwise authenticated only |
+| Public write | place an order, demo traffic generator | anyone while `DEMO_MODE` is on, otherwise authenticated only |
 | Operator | advance or cancel an existing order | authenticated, always, demo mode or not |
 
 Every environment switch defaults to the closed setting, and the service
@@ -261,7 +261,7 @@ about where they stop.
   transaction, a subscriber can never see an event for work that rolled
   back. It does not, however, survive a subscriber being offline: if the
   realtime service is down at the moment `NOTIFY` fires, that message is
-  gone. The dashboard is a live view, not an event log, and it re-reads
+  gone. The dashboard shows live state and keeps no event log. It re-reads
   current state on reconnect, so state self-heals but individual transient
   events can be missed. At-least-once delivery would need a transactional
   outbox table that a worker replays, or logical replication; both are
@@ -270,9 +270,9 @@ about where they stop.
   Safety comes from every writer taking the same row locks in primary-key
   order; `lock_timeout` bounds how long a contended request waits rather
   than letting it hang. Code that bypasses the service, or takes the same
-  rows in a different order, could still deadlock or race. This is
-  correctness under contention on one PostgreSQL primary, not a
-  distributed lock.
+  rows in a different order, could still deadlock or race. The guarantee
+  covers contention on one PostgreSQL primary; a distributed lock would be a
+  different design.
 - **Fan-out is single-process.** One realtime gateway holds the
   `LISTEN` connection and broadcasts to its own clients. Running several
   gateway instances would need each to listen independently (fine, since

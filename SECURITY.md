@@ -21,7 +21,7 @@ says so. It is a development file; the "Production values" block at the
 bottom of it is what a deployment wants.
 
 With debug off the service always sends `nosniff`, `X-Frame-Options: DENY`
-and a same-origin referrer policy. `DJANGO_BEHIND_TLS` additionally enables
+and a same-origin referrer policy. `DJANGO_BEHIND_TLS` also enables
 the HTTPS redirect, HSTS and secure-only session and CSRF cookies.
 
 Those two groups are separate deliberately. The bundled single-instance

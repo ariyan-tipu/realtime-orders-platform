@@ -7,7 +7,7 @@
 Turning an order into a picking route is a travelling-salesman variant:
 minimise picker travel over the warehouse grid while visiting every bin. We
 use nearest-neighbour construction plus 2-opt refinement, which is
-quadratic per pass, runs many passes, is pure CPU, and executes on the
+quadratic per pass, runs many passes, is pure CPU and executes on the
 request path for every pick list. This is the textbook case for native code:
 an interpreter-bound inner loop, not I/O.
 

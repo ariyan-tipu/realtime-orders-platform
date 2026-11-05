@@ -12,7 +12,7 @@ query, [analytics/queries/top_sellers.sql](../services/core/analytics/queries/to
   to take the top N per warehouse, which a plain `LIMIT` cannot express;
 - a selective predicate: `created_at >= now() - 24h AND status <> 'CANCELLED'`.
 
-Everything below is measured, not asserted, via
+Every figure below is measured with
 `python manage.py explain_report`. The command runs `VACUUM (ANALYZE)`
 first, executes each variant twice and reports the warm run, and measures
 the "without index" case by dropping the index inside a transaction that is
@@ -44,7 +44,7 @@ Two reasons, both worth knowing:
    secondary indexes do not implicitly carry the primary key (that is an
    InnoDB behaviour), so an index-only scan was impossible; every hit would
    need a heap visit. With around 12% of a randomly ordered table matching,
-   essentially every heap page contains a match, so a heap-fetching index
+   almost every heap page contains a match, so a heap-fetching index
    scan reads more pages than a straight seq scan. The planner was right to
    refuse.
 2. **A freshly bulk-loaded table has no visibility map** until VACUUM runs,
@@ -67,7 +67,7 @@ Dataset: 120,000 orders and 299,234 items over one recency-skewed year;
 The orders-side access drops from a 23.6 ms parallel seq scan to a 1.8 ms
 index-only scan, about 13x on the node the index targets. End to end,
 though: 140.1 ms against 131.0 ms. The plan's cost centre is now the other
-side of the join, hashing 299k order items, and at 3k outer rows the
+side of the join, where it hashes 299k order items. At 3k outer rows the
 planner correctly judges per-row FK-index probing more expensive than one
 hash build. An index is not magic; it removes the cost it targets and the
 bottleneck moves.

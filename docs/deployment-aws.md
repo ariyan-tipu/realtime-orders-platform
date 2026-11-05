@@ -1,6 +1,6 @@
 # AWS deployment runbook (EC2 + S3)
 
-The repository is **deploy-ready, not deployed**: CI already builds and
+The repository is **ready to deploy but not deployed**: CI already builds and
 publishes production images to GHCR, and `.github/workflows/deploy.yml`
 performs the rollout below the moment secrets are configured. Nothing in this
 document is required to run or evaluate the project locally.
@@ -126,5 +126,5 @@ deployment to notice.
 A single well-run Compose deployment is fully explainable end-to-end in an
 interview; a Kubernetes cluster that exists to exist is not. The images are
 standard OCI artefacts, so promoting them into EKS (Deployment + Service +
-HPA per service, RDS instead of the db container) is an additive step, not a
+HPA per service, RDS instead of the db container) is an additive step and needs no
 rewrite. See ADR 0004.

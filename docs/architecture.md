@@ -99,8 +99,8 @@ reverse, so the two lock classes cannot form a cycle either.
   coordination.
 - The single writer database is the real bottleneck. The next steps at
   real scale (read replicas for the dashboard snapshot, an outbox plus a
-  broker for events, per-warehouse partitioning) are documented trade-offs
-  in ADR 0002, not accidents.
+  broker for events, per-warehouse partitioning) are deliberate trade-offs,
+  documented in ADR 0002.
 
 ## Tech stack, and why each piece is here
 
